@@ -1,4 +1,4 @@
-# eOne Integration for Business Central — Fabric Warehouse
+# eOne Integration for Business Central - Fabric Warehouse
 
 Deploys a Microsoft Fabric warehouse for Business Central data, ready for the eOne integration maps
 to load into and for Power BI to report from.
@@ -13,8 +13,8 @@ Three schemas, and the split between them is the thing to know:
 | `bc` | One row per record, resolved from `bcRaw` | Query this |
 | `bcModel` | Reporting, lifecycle and data-quality views, plus a calendar dimension | Point Power BI here |
 
-The reports are already there — trial balance, AR and AP aging, customer and vendor statements,
-sales and purchase analysis, inventory valuation, gross margin, open order backlog — as plain views
+The reports are already there - trial balance, AR and AP aging, customer and vendor statements,
+sales and purchase analysis, inventory valuation, gross margin, open order backlog - as plain views
 over the landed data. No modelling step, no DAX, nothing to load first.
 
 ## Before you start
@@ -47,7 +47,7 @@ Install-eOneWarehouse -CreateWarehouse -Database BCWarehouse
 ```
 
 You'll be asked which tenant and which workspace. To deploy into a warehouse that already exists,
-leave `-CreateWarehouse` off and you'll be offered the ones you can reach — or pass its connection
+leave `-CreateWarehouse` off and you'll be offered the ones you can reach - or pass its connection
 string directly:
 
 ```
@@ -74,12 +74,12 @@ first.
 
 ## After deploying
 
-1. Load the data. The integration maps that fill this warehouse are supplied by eOne — **contact
+1. Load the data. The integration maps that fill this warehouse are supplied by eOne - **contact
    [sales@eonesolutions.com](mailto:sales@eonesolutions.com) to get them set up**. They insert into `bcRaw` and match on nothing: duplicates are
    expected, and the `bc` views resolve the latest version of each record.
 2. Point Power BI at the **`bcModel`** schema.
 3. Watch `bcModel.vw_loadHealth`. One row per feed per company: how many records, when a map last
-   wrote, and how current the data is. Alert on `lastLoadedUtc` going stale — a map that quietly
+   wrote, and how current the data is. Alert on `lastLoadedUtc` going stale - a map that quietly
    stops is the failure that costs you, because the warehouse keeps answering with old numbers.
 
 `bcModel.vw_dataQuality` answers the other question: whether what landed hangs together. No rows
@@ -87,7 +87,7 @@ means clean.
 
 ## Authentication
 
-Microsoft Entra only — Fabric Warehouse accepts no SQL logins. The commands sign you in
+Microsoft Entra only - Fabric Warehouse accepts no SQL logins. The commands sign you in
 interactively by default. For unattended runs, pass `-AccessToken` with a `database.windows.net`
 token.
 

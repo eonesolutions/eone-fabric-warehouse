@@ -1,6 +1,6 @@
 ﻿#Requires -Version 5.1
 <#
-    eOne.FabricWarehouse — the shipped surface of the warehouse deployment.
+    eOne.FabricWarehouse - the shipped surface of the warehouse deployment.
 
     WHY THIS WRAPS A SCRIPT RATHER THAN ABSORBING IT
     Deploy-EOneWarehouse.ps1 carries a lot of hard-won behaviour that has nothing to do with SQL:
@@ -16,9 +16,9 @@
     Install builds a warehouse. Update keeps one current WITHOUT discarding what it holds, which is
     the difference that matters once a customer has loaded data:
 
-        Install-eOneWarehouse   every file, tables dropped and recreated. Refuses outright when
+        Install-eOneWarehouse every file, tables dropped and recreated. Refuses outright when
                                 landing tables already exist; -Rebuild is the deliberate override.
-        Update-eOneWarehouse    creates landing tables that are MISSING, leaves existing ones and
+        Update-eOneWarehouse creates landing tables that are MISSING, leaves existing ones and
                                 their rows alone, and recreates every view.
 
     Views are disposable and tables are not. That is the whole of the reasoning: every file
@@ -45,7 +45,7 @@ function Get-eOneModuleFile {
 function Invoke-eOneDeploy {
     param(
         [Parameter(Mandatory)][hashtable] $Bound,
-        [Parameter(Mandatory)][string]    $Mode
+        [Parameter(Mandatory)][string] $Mode
     )
 
     $script = Get-eOneModuleFile -Leaf 'Deploy-EOneWarehouse.ps1'
@@ -154,7 +154,7 @@ function Install-eOneWarehouse {
     # ConfirmImpact is Medium, not High, so an ordinary install does not stop to ask: it creates a
     # schema and destroys nothing. -Rebuild earns its own prompt below.
     $action = if ($Rebuild) { 'DISCARD every landed row and rebuild the schema from empty' }
-              else          { 'deploy the warehouse schema' }
+              else { 'deploy the warehouse schema' }
 
     if (-not $PSCmdlet.ShouldProcess($target, $action)) {
         # -WhatIf should say what WOULD run, not just that something would. -ListOnly prints the
