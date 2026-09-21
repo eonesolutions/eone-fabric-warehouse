@@ -216,6 +216,77 @@ function Format-Workspace {
     "{0}  {1}{2}" -f $name, $Workspace.id, $note
 }
 
+# An Entra sign-in can be made impossible by what else is already loaded in the window, and it
+# fails with an error that names none of that. Two causes seen in the field, one shape: another
+# module got its own copy of an assembly MSAL needs into the process first.
+#
+#     SqlServer/SQLPS before Az   ->  Microsoft.Identity.Client 4.65 alongside 4.84
+#     PSResourceGet before Az     ->  System.Text.Json 8.0.0.6 alongside 10.0.0.0
+#
+# The second is easy to hit by accident, because installing this module with Install-PSResource
+# and then running it in the same window does exactly that. The deploy dies at sign-in with
+#
+#     The type initializer for 'Microsoft.Identity.Client.Platforms.net.MsalJsonSerializerContext'
+#     threw an exception.
+#
+# which says nothing about either module: MSAL's source-generated serializer is bound to one
+# System.Text.Json and the other one won. Neither case can be undone here - Remove-Module does not
+# unbind an assembly - so the only honest answer is a new window, and it is worth saying that
+# before the sign-in rather than leaving the operator with that sentence.
+#
+# Returns the reason to refuse, or $null when the session is fine.
+function Get-SignInBlocker {
+    param([switch] $SqlFirst)
+
+    $loaded = [AppDomain]::CurrentDomain.GetAssemblies() | ForEach-Object { $_.GetName() }
+    $reason = $null
+
+    if ($SqlFirst) {
+        $reason = 'This session loaded the SqlServer (or SQLPS) module before Azure PowerShell.'
+    }
+    else {
+        # An old Microsoft.Identity.Client already bound is the same trouble even when Az is
+        # loaded, because it means Az lost the race earlier.
+        $old = @($loaded | Where-Object { $_.Name -eq 'Microsoft.Identity.Client' -and
+                                          $_.Version -lt [version]'4.84' })
+        if ($old.Count -gt 0) {
+            $reason = "This session has Microsoft.Identity.Client $($old[0].Version) loaded, " +
+                      'which Azure PowerShell cannot sign in through.'
+        }
+    }
+
+    if (-not $reason) {
+        # Reported with the version numbers rather than as a verdict, so the operator can check
+        # it - and so a bug report carries the evidence.
+        $json = @($loaded | Where-Object { $_.Name -eq 'System.Text.Json' } |
+                  ForEach-Object { $_.Version.ToString() } | Sort-Object -Unique)
+        if ($json.Count -gt 1) {
+            $reason = "This session has $($json.Count) versions of System.Text.Json loaded " +
+                      "($($json -join ', ')), and MSAL binds the wrong one."
+        }
+    }
+
+    if (-not $reason) { return $null }
+
+    @"
+$reason
+
+Signing in to Azure cannot work in this window.
+
+Nothing is wrong with your browser or your account, and -DeviceCode fails the same way. Another
+module made its own copy of an assembly available to the process, Azure PowerShell binds to that
+copy, and the sign-in fails on a missing or uninitialisable type.
+
+It cannot be undone here: Remove-Module does not unbind an assembly. Installing this module with
+Install-PSResource and then running it in the same window is the common way to arrive here.
+
+    Open a NEW PowerShell window and run this command again.
+
+Only the Azure sign-in is affected. Against a warehouse that already exists, pass -Server with its
+connection string: that path never loads Az, and works even in this session.
+"@
+}
+
 # Az.Accounts 5.x ALWAYS returns the token as a SecureString - its own help for -AsSecureString
 # reads "The parameter is no longer used ... the output token is a SecureString" - and its
 # OutputType is PSSecureAccessToken. Interpolating that into a header sends the literal text
@@ -249,6 +320,12 @@ function Get-PlainToken {
             throw "This Azure PowerShell is too old to request a token for $ResourceUrl. " +
                   'Update it (Install-Module Az.Accounts -Force) and run this again.'
         }
+
+        # The context that got this far may have come out of the token cache, so this is where a
+        # poisoned session shows up late: the first audience never needed a sign-in and the
+        # second one does. Check before asking for it, not after it fails.
+        $blocker = Get-SignInBlocker
+        if ($blocker) { throw $blocker }
 
         Write-Note "Signing in again for $ResourceUrl."
         Write-Note 'One sign-in covers one audience, and this needs a second.'
@@ -545,28 +622,8 @@ if ($CreateWarehouse -or $discover) {
         # session that already authenticated - the usual reason to be re-running this - is not
         # turned away for a problem it does not have.
         #
-        # Belt and braces: an old Microsoft.Identity.Client already bound is the same trouble even
-        # if Az happens to be loaded, because it means Az lost the race earlier.
-        $oldMsalBound = @([AppDomain]::CurrentDomain.GetAssemblies() |
-                          Where-Object { $_.GetName().Name -eq 'Microsoft.Identity.Client' -and
-                                         $_.GetName().Version -lt [version]'4.84' })
-        if ($sqlFirst -or $oldMsalBound.Count -gt 0) {
-            throw @'
-This PowerShell session loaded the SqlServer (or SQLPS) module before Azure PowerShell, so
-Connect-AzAccount cannot work in it.
-
-Nothing is wrong with your browser or your account. That module makes an older
-Microsoft.Identity.Client available to the process, Azure PowerShell binds to it, and the failure
-surfaces as a missing type plus a suggestion to try -DeviceCode. -DeviceCode fails the same way.
-
-It cannot be undone in this session -- Remove-Module does not unbind it.
-
-    Open a NEW PowerShell window and run this command again.
-
-Only the Azure sign-in is affected. Against a warehouse that already exists, pass -Server with its
-connection string: that path never loads Az, and works even in this session.
-'@
-        }
+        $blocker = Get-SignInBlocker -SqlFirst:$sqlFirst
+        if ($blocker) { throw $blocker }
 
         # Azure PowerShell 5.x signs in through WAM (the Windows Web Account Manager) by default,
         # and WAM needs a parent window handle that a plain console host does not supply:
