@@ -100,7 +100,12 @@ jobs:
             throw "Installed module exports: $($cmds -join ', ')"
           }
           # -ListOnly returns before it connects to anything, so this touches no warehouse.
-          $out = Install-eOneWarehouse -Database CiSmokeTest -ListOnly | Out-String
+          #
+          # 6>&1 is required, not decoration. The installer reports progress with Write-Host, which
+          # since PowerShell 5 goes to the INFORMATION stream rather than the pipeline - so a plain
+          # `| Out-String` captures nothing and this assertion fails while the output is visibly
+          # right there in the log. Anyone redirecting a real deploy to a file needs the same.
+          $out = Install-eOneWarehouse -Database CiSmokeTest -ListOnly 6>&1 | Out-String
           if ($out -notmatch '10_tables_core\.sql') { throw "Smoke test did not list the DDL:`n$out" }
           Update-eOneWarehouse -Database CiSmokeTest -ListOnly | Out-Null
           'smoke test passed'
