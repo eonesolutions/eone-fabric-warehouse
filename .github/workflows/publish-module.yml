@@ -93,7 +93,10 @@ jobs:
           New-Item -ItemType Directory -Force -Path $repo | Out-Null
           Register-PSResourceRepository -Name Local -Uri $repo -Trusted
           Publish-PSResource -Path ./eOne.FabricWarehouse -Repository Local
-          Install-PSResource eOne.FabricWarehouse -Repository Local -Scope CurrentUser -TrustRepository
+          # -Prerelease, or a preview version installs as nothing at all and the exports check
+          # below fails with an empty list. Publishing a prerelease works without it; only the
+          # install side filters them out, which is why this only appeared on the first tag.
+          Install-PSResource eOne.FabricWarehouse -Repository Local -Prerelease -Scope CurrentUser -TrustRepository
           Import-Module eOne.FabricWarehouse
           $cmds = (Get-Command -Module eOne.FabricWarehouse).Name
           if ($cmds -notcontains 'Install-eOneWarehouse' -or $cmds -notcontains 'Update-eOneWarehouse') {
