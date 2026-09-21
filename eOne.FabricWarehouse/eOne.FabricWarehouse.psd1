@@ -49,6 +49,11 @@ needs Az.Accounts.
 
     PrivateData       = @{
         PSData = @{
+            # Preview first. Gallery versions are immutable and can only be unlisted, so 1.0.0
+            # proper is spent once - after this has been installed from the real Gallery and
+            # driven against a warehouse. Drop this line to promote it.
+            Prerelease   = 'preview1'
+
             Tags         = @('Fabric', 'MicrosoftFabric', 'BusinessCentral', 'Dynamics365',
                              'DataWarehouse', 'eOne', 'SmartConnect', 'ETL')
             ProjectUri   = 'https://github.com/eonesolutions/eone-fabric-warehouse'
