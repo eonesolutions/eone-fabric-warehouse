@@ -49,10 +49,10 @@ needs Az.Accounts.
 
     PrivateData       = @{
         PSData = @{
-            # Preview first. Gallery versions are immutable and can only be unlisted, so 1.0.0
-            # proper is spent once - after this has been installed from the real Gallery and
-            # driven against a warehouse. Drop this line to promote it.
-            Prerelease   = 'preview2'
+            # No Prerelease line: this is 1.0.0 proper. The two previews were installed from the
+            # real Gallery and driven against a real warehouse before it was promoted, which is
+            # what the preview versions were for. Gallery versions are immutable, so a fix ships
+            # as 1.0.1 rather than as a replacement.
 
             Tags         = @('Fabric', 'MicrosoftFabric', 'BusinessCentral', 'Dynamics365',
                              'DataWarehouse', 'eOne', 'SmartConnect', 'ETL')
@@ -62,17 +62,20 @@ needs Az.Accounts.
             LicenseUri   = 'https://www.eonesolutions.com/end-user-license-agreement/'
             IconUri      = 'https://raw.githubusercontent.com/eonesolutions/eone-fabric-warehouse/main/icon.png'
             ReleaseNotes = @'
-1.0.0-preview2
-  - Sign in again automatically when a second audience is needed. One Entra sign-in authorises one
-    resource; creating the warehouse and running the SQL are two, and on a tenant with MFA the
-    second failed with "User interaction is required" and stopped the deployment.
+1.0.0
+  First release.
 
-1.0.0-preview1
-  - Install-eOneWarehouse and Update-eOneWarehouse replace the standalone deploy script.
-  - -Force is gone. A first install refuses to run over an existing deployment and points at
-    Update-eOneWarehouse; Install-eOneWarehouse -Rebuild is the deliberate, confirmed override.
-  - Update-eOneWarehouse recreates every view and adds missing landing tables, leaving existing
-    tables and their rows untouched.
+  - Install-eOneWarehouse deploys the schema: the bcRaw landing tables the SmartConnect maps
+    insert into, the bc current-state views that resolve them to one row per record, and the
+    bcModel reporting, lifecycle and data-quality views over those.
+  - Update-eOneWarehouse recreates every view and adds any missing landing table, leaving existing
+    tables and their rows untouched. A first install refuses to run over an existing deployment
+    and says so; Install-eOneWarehouse -Rebuild is the deliberate, confirmed way to start again.
+  - -CreateWarehouse creates the Fabric warehouse item first, and signs in a second time by itself
+    when the second audience needs it.
+  - Sign-in checks the session before asking for credentials. A window where another module has
+    already bound the assemblies MSAL needs cannot authenticate at all, and now says which module
+    and what to do instead of failing on a missing type.
 '@
         }
     }
