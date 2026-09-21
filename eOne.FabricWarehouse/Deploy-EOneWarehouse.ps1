@@ -231,7 +231,43 @@ function Get-PlainToken {
     $tokenArgs = @{ ResourceUrl = $ResourceUrl }
     if ($Tenant) { $tokenArgs['TenantId'] = $Tenant }
 
-    $token = (Get-AzAccessToken @tokenArgs -WarningAction SilentlyContinue).Token
+    # A sign-in authorises ONE audience, and this script needs two: api.fabric.microsoft.com to
+    # create the warehouse item, and database.windows.net to run the SQL. On a tenant with MFA or a
+    # conditional-access policy - which is most of them - Azure PowerShell cannot acquire the second
+    # silently, and fails with:
+    #
+    #     Authentication failed against resource https://api.fabric.microsoft.com. User interaction
+    #     is required ... rerun 'Connect-AzAccount' with additional parameter '-AuthScope ...'
+    #
+    # That message names the fix, which helps only somebody who already knew. Ask for the scope here
+    # instead, at the moment it is needed, and carry on.
+    try {
+        $token = (Get-AzAccessToken @tokenArgs -WarningAction SilentlyContinue).Token
+    }
+    catch {
+        if (-not (Get-Command Connect-AzAccount).Parameters.ContainsKey('AuthScope')) {
+            throw "This Azure PowerShell is too old to request a token for $ResourceUrl. " +
+                  'Update it (Install-Module Az.Accounts -Force) and run this again.'
+        }
+
+        Write-Note "Signing in again for $ResourceUrl."
+        Write-Note 'One sign-in covers one audience, and this needs a second.'
+
+        $rescope = @{ AuthScope = $ResourceUrl; SkipContextPopulation = $true; ErrorAction = 'Stop' }
+        if ($Tenant) { $rescope['Tenant'] = $Tenant }
+        try {
+            Connect-AzAccount @rescope | Out-Null
+        }
+        catch {
+            # Same fallback as the first sign-in: a console with no usable browser.
+            Write-Note 'Browser sign-in was not possible. Falling back to device code.'
+            Connect-AzAccount @rescope -UseDeviceAuthentication | Out-Null
+        }
+
+        # Deliberately not wrapped: if it fails twice the operator needs the real error, not a
+        # third attempt.
+        $token = (Get-AzAccessToken @tokenArgs -WarningAction SilentlyContinue).Token
+    }
     if ($token -is [System.Security.SecureString]) {
         # NetworkCredential does the unwrap without a manual Marshal free, and works on both
         # Windows PowerShell 5.1 and PowerShell 7.

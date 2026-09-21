@@ -52,7 +52,7 @@ needs Az.Accounts.
             # Preview first. Gallery versions are immutable and can only be unlisted, so 1.0.0
             # proper is spent once - after this has been installed from the real Gallery and
             # driven against a warehouse. Drop this line to promote it.
-            Prerelease   = 'preview1'
+            Prerelease   = 'preview2'
 
             Tags         = @('Fabric', 'MicrosoftFabric', 'BusinessCentral', 'Dynamics365',
                              'DataWarehouse', 'eOne', 'SmartConnect', 'ETL')
@@ -62,7 +62,12 @@ needs Az.Accounts.
             LicenseUri   = 'https://www.eonesolutions.com/end-user-license-agreement/'
             IconUri      = 'https://raw.githubusercontent.com/eonesolutions/eone-fabric-warehouse/main/icon.png'
             ReleaseNotes = @'
-1.0.0
+1.0.0-preview2
+  - Sign in again automatically when a second audience is needed. One Entra sign-in authorises one
+    resource; creating the warehouse and running the SQL are two, and on a tenant with MFA the
+    second failed with "User interaction is required" and stopped the deployment.
+
+1.0.0-preview1
   - Install-eOneWarehouse and Update-eOneWarehouse replace the standalone deploy script.
   - -Force is gone. A first install refuses to run over an existing deployment and points at
     Update-eOneWarehouse; Install-eOneWarehouse -Rebuild is the deliberate, confirmed override.
