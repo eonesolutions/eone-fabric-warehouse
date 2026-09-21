@@ -341,7 +341,9 @@ function Invoke-FabricApi {
     catch {
         $r = $_.Exception.Response
         $status = $null
-        if ($r) { try { $status = [int]$r.StatusCode } catch { } }
+        # Best effort: some failures carry no usable StatusCode, and the message below is built
+        # from whatever IS available. Verbose rather than empty so the swallow is visible.
+        if ($r) { try { $status = [int]$r.StatusCode } catch { Write-Verbose "No status code on the response: $($_.Exception.Message)" } }
         $detail = Read-FabricError $r
         $hint = ''
         if ($status -eq 403) {
@@ -554,7 +556,11 @@ connection string: that path never loads Az, and works even in this session.
         try {
             Update-AzConfig -LoginExperienceV2 Off -Scope Process -WarningAction SilentlyContinue |
                 Out-Null
-        } catch { }
+        } catch {
+            # Older Az.Accounts has no LoginExperienceV2 setting. Sign-in still works; it just asks
+            # a subscription question this script does not need an answer to.
+            Write-Verbose "Could not disable the interactive login experience: $($_.Exception.Message)"
+        }
 
         $connect = @{ SkipContextPopulation = $true; ErrorAction = 'Stop' }
         if ($TenantId) { $connect['Tenant'] = $TenantId }
