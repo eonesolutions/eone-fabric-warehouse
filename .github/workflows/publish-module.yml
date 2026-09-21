@@ -1,0 +1,149 @@
+# Publishes eOne.FabricWarehouse to the PowerShell Gallery.
+#
+# Validation runs on every push and pull request; publishing runs only for a version tag, and only
+# after a human approves the `psgallery` environment. Gallery versions are immutable and can be
+# unlisted but never replaced, so everything that can be checked is checked before the push rather
+# than discovered after it.
+name: Publish module
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A second tag push while one is publishing would race for the same version number.
+concurrency:
+  group: publish-module
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Manifest is valid
+        shell: pwsh
+        run: |
+          $m = Test-ModuleManifest ./eOne.FabricWarehouse/eOne.FabricWarehouse.psd1
+          "version    : $($m.Version)"
+          "prerelease : $($m.PrivateData.PSData.Prerelease)"
+          "exports    : $($m.ExportedFunctions.Keys -join ', ')"
+
+      - name: The payload is actually in the module
+        shell: pwsh
+        run: |
+          # The module resolves its own sql/ and script at run time. In the repo they sit beside the
+          # manifest; if a publish ever stages them somewhere else the module installs cleanly and
+          # then fails on first use, which is the worst place to find out.
+          $root = './eOne.FabricWarehouse'
+          $sql = @(Get-ChildItem "$root/sql" -Filter *.sql -ErrorAction SilentlyContinue)
+          if ($sql.Count -lt 10) { throw "Expected the sql folder inside the module; found $($sql.Count) file(s)." }
+          if (-not (Test-Path "$root/Deploy-EOneWarehouse.ps1")) { throw 'Deploy-EOneWarehouse.ps1 is missing from the module.' }
+          "sql files : $($sql.Count)"
+
+      - name: Tag and module version agree
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          # Tagging v1.0.1 and publishing 1.0.0 is a mistake you cannot take back: the Gallery keeps
+          # the version you pushed and the tag points at something else forever.
+          $m = Test-ModuleManifest ./eOne.FabricWarehouse/eOne.FabricWarehouse.psd1
+          $expected = 'v' + $m.Version
+          if ($m.PrivateData.PSData.Prerelease) { $expected += '-' + $m.PrivateData.PSData.Prerelease }
+          $tag = '${{ github.ref_name }}'
+          if ($tag -ne $expected) { throw "Tag $tag does not match the manifest, which would publish $expected." }
+          "tag $tag matches the manifest"
+
+      - name: PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -AllowClobber
+          $found = Invoke-ScriptAnalyzer -Path ./eOne.FabricWarehouse -Recurse -Severity Warning,Error
+          if ($found) {
+            $found | Format-Table RuleName, Severity, ScriptName, Line, Message -AutoSize | Out-String -Width 200
+            throw "$($found.Count) PSScriptAnalyzer finding(s). The Gallery scans published packages, so these are fixed before release."
+          }
+          'clean'
+
+      - name: Install from a local repository and smoke test
+        shell: pwsh
+        run: |
+          # The same dry run done by hand before the first release: package it, install the PACKAGED
+          # copy, and drive it. Importing from the working tree proves nothing about what a customer
+          # receives, because the module resolves its payload relative to where it is installed.
+          Install-Module Microsoft.PowerShell.PSResourceGet -Force -Scope CurrentUser -AllowClobber
+          $repo = Join-Path $env:RUNNER_TEMP 'localrepo'
+          New-Item -ItemType Directory -Force -Path $repo | Out-Null
+          Register-PSResourceRepository -Name Local -Uri $repo -Trusted
+          Publish-PSResource -Path ./eOne.FabricWarehouse -Repository Local
+          Install-PSResource eOne.FabricWarehouse -Repository Local -Scope CurrentUser -TrustRepository
+          Import-Module eOne.FabricWarehouse
+          $cmds = (Get-Command -Module eOne.FabricWarehouse).Name
+          if ($cmds -notcontains 'Install-eOneWarehouse' -or $cmds -notcontains 'Update-eOneWarehouse') {
+            throw "Installed module exports: $($cmds -join ', ')"
+          }
+          # -ListOnly returns before it connects to anything, so this touches no warehouse.
+          $out = Install-eOneWarehouse -Database CiSmokeTest -ListOnly | Out-String
+          if ($out -notmatch '10_tables_core\.sql') { throw "Smoke test did not list the DDL:`n$out" }
+          Update-eOneWarehouse -Database CiSmokeTest -ListOnly | Out-Null
+          'smoke test passed'
+
+  # Both shells, because the module declares 5.1 and is used from 7. The encoding class of bug -
+  # a non-ASCII character in a file with no BOM - only shows up in Windows PowerShell.
+  import:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        shell: [powershell, pwsh]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Import under ${{ matrix.shell }}
+        shell: ${{ matrix.shell }}
+        run: |
+          Import-Module ./eOne.FabricWarehouse/eOne.FabricWarehouse.psd1 -Force
+          $h = Get-Help Install-eOneWarehouse
+          if (-not $h.Synopsis) { throw 'Comment-based help did not load.' }
+          "$($PSVersionTable.PSEdition) $($PSVersionTable.PSVersion): $($h.Synopsis)"
+
+  publish:
+    needs: [validate, import]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    # Gated: the API key is an environment secret, so this job waits for a human to approve the
+    # deployment before it is given one. Nothing else in the repository can reach the key.
+    environment: psgallery
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish to the PowerShell Gallery
+        shell: pwsh
+        env:
+          PSGALLERY_KEY: ${{ secrets.PSGALLERY_KEY }}
+        run: |
+          if (-not $env:PSGALLERY_KEY) { throw 'PSGALLERY_KEY is not set on the psgallery environment.' }
+          Install-Module Microsoft.PowerShell.PSResourceGet -Force -Scope CurrentUser -AllowClobber
+          # Read from the environment rather than interpolating the secret into the command line,
+          # where it would reach the process table and any command echo.
+          Publish-PSResource -Path ./eOne.FabricWarehouse -Repository PSGallery -ApiKey $env:PSGALLERY_KEY
+          'published ' + ${{ github.ref_name }}
+
+      - name: Confirm it is live
+        shell: pwsh
+        run: |
+          # The Gallery indexes asynchronously, so give it a moment before believing an absence.
+          $m = Test-ModuleManifest ./eOne.FabricWarehouse/eOne.FabricWarehouse.psd1
+          foreach ($attempt in 1..10) {
+            Start-Sleep -Seconds 30
+            $found = Find-Module eOne.FabricWarehouse -AllowPrerelease -ErrorAction SilentlyContinue |
+                     Where-Object { $_.Version -like "$($m.Version)*" }
+            if ($found) { "live: $($found.Name) $($found.Version)"; return }
+            "not indexed yet (attempt $attempt)"
+          }
+          Write-Warning 'Published, but not visible on the Gallery yet. Check manually before announcing it.'
