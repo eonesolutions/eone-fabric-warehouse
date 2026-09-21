@@ -52,7 +52,10 @@ needs Az.Accounts.
             Tags         = @('Fabric', 'MicrosoftFabric', 'BusinessCentral', 'Dynamics365',
                              'DataWarehouse', 'eOne', 'SmartConnect', 'ETL')
             ProjectUri   = 'https://github.com/eonesolutions/eone-fabric-warehouse'
-            LicenseUri   = 'https://www.eonesolutions.com/legal/'
+            # Both taken from the AppSource listing (appsource/Core/listing.md) so the Gallery,
+            # AppSource and app.json cannot describe the product three different ways.
+            LicenseUri   = 'https://www.eonesolutions.com/end-user-license-agreement/'
+            IconUri      = 'https://raw.githubusercontent.com/eonesolutions/eone-fabric-warehouse/main/icon.png'
             ReleaseNotes = @'
 1.0.0
   - Install-eOneWarehouse and Update-eOneWarehouse replace the standalone deploy script.

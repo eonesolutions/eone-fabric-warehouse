@@ -75,7 +75,7 @@ first.
 ## After deploying
 
 1. Load the data. The integration maps that fill this warehouse are supplied by eOne — **contact
-   eOne to get them set up**. They insert into `bcRaw` and match on nothing: duplicates are
+   [sales@eonesolutions.com](mailto:sales@eonesolutions.com) to get them set up**. They insert into `bcRaw` and match on nothing: duplicates are
    expected, and the `bc` views resolve the latest version of each record.
 2. Point Power BI at the **`bcModel`** schema.
 3. Watch `bcModel.vw_loadHealth`. One row per feed per company: how many records, when a map last
