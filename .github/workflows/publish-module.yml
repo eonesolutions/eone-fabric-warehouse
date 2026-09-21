@@ -97,15 +97,25 @@ jobs:
 
   # Both shells, because the module declares 5.1 and is used from 7. The encoding class of bug -
   # a non-ASCII character in a file with no BOM - only shows up in Windows PowerShell.
+  #
+  # Two literal steps rather than a matrix: `shell` does not accept an expression, so
+  # `shell: ${{ matrix.shell }}` is rejected when the workflow is parsed, not when it runs
+  # ("Unrecognized named-value: 'matrix'"). The duplication is four lines and it works.
   import:
     runs-on: windows-latest
-    strategy:
-      matrix:
-        shell: [powershell, pwsh]
     steps:
       - uses: actions/checkout@v4
-      - name: Import under ${{ matrix.shell }}
-        shell: ${{ matrix.shell }}
+
+      - name: Import under Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          Import-Module ./eOne.FabricWarehouse/eOne.FabricWarehouse.psd1 -Force
+          $h = Get-Help Install-eOneWarehouse
+          if (-not $h.Synopsis) { throw 'Comment-based help did not load.' }
+          "$($PSVersionTable.PSEdition) $($PSVersionTable.PSVersion): $($h.Synopsis)"
+
+      - name: Import under PowerShell 7
+        shell: pwsh
         run: |
           Import-Module ./eOne.FabricWarehouse/eOne.FabricWarehouse.psd1 -Force
           $h = Get-Help Install-eOneWarehouse
