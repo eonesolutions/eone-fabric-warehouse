@@ -65,7 +65,17 @@ jobs:
         shell: pwsh
         run: |
           Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -AllowClobber
-          $found = Invoke-ScriptAnalyzer -Path ./eOne.FabricWarehouse -Recurse -Severity Warning,Error
+          # PSAvoidUsingWriteHost is excluded, and only that one. Deploy-EOneWarehouse.ps1 is an
+          # interactive installer whose coloured progress IS its interface; the alternative is a
+          # silent deploy that prints a summary when it finishes. That is a considered decision
+          # rather than an oversight, and the Gallery reports this rule without blocking on it.
+          #
+          # Everything else stays fatal. Note this rule only appears here at all because the
+          # PUBLISHED layout puts the script inside the module folder, where the analyzer sees it -
+          # running it against the repo folder finds nothing, which is why CI caught this and a
+          # local run did not.
+          $found = Invoke-ScriptAnalyzer -Path ./eOne.FabricWarehouse -Recurse -Severity Warning,Error `
+                                         -ExcludeRule PSAvoidUsingWriteHost
           if ($found) {
             $found | Format-Table RuleName, Severity, ScriptName, Line, Message -AutoSize | Out-String -Width 200
             throw "$($found.Count) PSScriptAnalyzer finding(s). The Gallery scans published packages, so these are fixed before release."
@@ -142,7 +152,9 @@ jobs:
           # Read from the environment rather than interpolating the secret into the command line,
           # where it would reach the process table and any command echo.
           Publish-PSResource -Path ./eOne.FabricWarehouse -Repository PSGallery -ApiKey $env:PSGALLERY_KEY
-          'published ' + ${{ github.ref_name }}
+          # Interpolated inside the string: bare, the tag expands to v1.0.0 and PowerShell reads
+          # it as a command, failing the step AFTER the module has already been published.
+          "published ${{ github.ref_name }}"
 
       - name: Confirm it is live
         shell: pwsh
