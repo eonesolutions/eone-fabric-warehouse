@@ -6,9 +6,14 @@
 # than discovered after it.
 name: Publish module
 
+# Tags, not branches. Pushing main and the tag together - which is how a release is made here -
+# counts as two push events on one commit, and with `branches: [main]` alongside `tags` GitHub
+# starts a full run for each: same commit, same checks, twice, and the pair sits in the
+# `publish-module` concurrency group so the second waits for the first. Validation still covers
+# every change through pull_request, and every release through its tag; workflow_dispatch is there
+# for checking main on its own.
 on:
   push:
-    branches: [main]
     tags: ['v*']
   pull_request:
     branches: [main]
